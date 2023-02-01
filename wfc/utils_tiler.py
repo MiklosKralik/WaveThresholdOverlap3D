@@ -10,6 +10,42 @@ import os
 # O is the overlap, which is always N-1
 # if wrap_pad is True the the array is padded with wrap around otherwise edge tiles will be thrown away
 
+def extract_cubes(bitcube, form, N=2, wrap_pad=True):
+    """ Extracts all overlapping cubes from a numpy array
+    Args:
+    bitcube input may have the following forms: HW, HWC, HWD
+    bitcube: numpy array of type int
+    N is the size of the tile or cube
+    wrap_pad is True the the array is padded with wrap around otherwise edge tiles will be thrown away """
+    # assert bicube is of type int
+    try:
+        assert bitcube.dtype == np.int
+    except AssertionError:
+        print('bitcube is not of type int')
+        return
+    O = N-1
+
+    if form == 'HW':
+        H, W = bitcube.shape
+        H_pad, W_pad = get_pad_shape(bitcube.shape, N)
+        bitcube = pad(bitcube, wrap_pad, (H_pad, W_pad))
+
+    elif form == 'HWC':
+        H, W, C = bitcube.shape
+        H_pad, W_pad = get_pad_shape(bitcube.shape[:-1], N)
+        C = bitcube.shape[-1]
+        bitcube = pad(bitcube, wrap_pad, (H_pad, W_pad, 0))
+
+    elif form == 'HWD':
+        H, W, D = bitcube.shape
+        H_pad, W_pad, D_pad = get_pad_shape(bitcube.shape, N)
+        bitcube = pad(bitcube, wrap_pad, (H_pad, W_pad, D_pad))
+    
+    idx_master = None
+    print(bitcube.shape)
+    cubes = construct_master(bitcube, form, N)
+    return bitcube, cubes
+
 def get_pad(x, N):
     return (N - x) % N
 
@@ -79,42 +115,31 @@ def construct_master(bitcube, form, N):
     return master
 
 
-def extract_cubes(bitcube, form, N=2, wrap_pad=False):
-    """ Extracts all overlapping cubes from a numpy array
-    Args:
-    bitcube input may have the following forms: HW, HWC, HWD
-    bitcube: numpy array of type int
-    N is the size of the tile or cube
-    wrap_pad is True the the array is padded with wrap around otherwise edge tiles will be thrown away """
-    # assert bicube is of type int
-    try:
-        assert bitcube.dtype == np.int
-    except AssertionError:
-        print('bitcube is not of type int')
-        return
-    O = N-1
-
-    if form == 'HW':
-        H, W = bitcube.shape
-        H_pad, W_pad = get_pad_shape(bitcube.shape, N)
-        bitcube = pad(bitcube, wrap_pad, (H_pad, W_pad))
-
-    elif form == 'HWC':
-        H, W, C = bitcube.shape
-        H_pad, W_pad = get_pad_shape(bitcube.shape[-1], N)
-        C = bitcube.shape[-1]
-        bitcube = pad(bitcube, wrap_pad, (H_pad, W_pad))
-
-    elif form == 'HWD':
-        H, W, D = bitcube.shape
-        H_pad, W_pad, D_pad = get_pad_shape(bitcube.shape, N)
-        bitcube = pad(bitcube, wrap_pad, (H_pad, W_pad, D_pad))
+# cube comparison with sensitivity to form
+def compare_cubes(cubes, form, N):
+    opposite_directions = {'left': 'right', 'right': 'left', 'up': 'down', 'down': 'up', 'front': 'back', 'back': 'front'}
+    O = N-1 # overlap
+    n_cubes = cubes.shape[0] # number of cubes
+    comparison = {}
+    if form == 'HW' or form == 'HWC':
+        directions = ['left', 'right', 'up', 'down']
+        for d in directions:
+            opp_d = opposite_directions[d]
+            view = return_shift(d, N, O)
+            opp_view = return_shift(opp_d, N, O)
+            cubes_comp, cubes_comp_opp = return_cubes_to_compare2D(cubes, view, opp_view)
+            comparison[d] = pairwise_compare(cubes_comp, cubes_comp_opp)
     
-    idx_master = None
-    print(bitcube.shape)
-    cubes = construct_master(bitcube, form, N)
-    return bitcube, cubes, idx_master
+    if form == 'HWD':
+        directions = ['left', 'right', 'up', 'down', 'front', 'back']
+        for d in directions:
+            opp_d = opposite_directions[d]
+            view = return_shift(d, N, O)
+            opp_view = return_shift(opp_d, N, O)
+            cubes_comp, cubes_comp_opp = return_cubes_to_compare3D(cubes, view, opp_view)
+            comparison[d] = pairwise_compare(cubes_comp, cubes_comp_opp)
 
+    return comparison # comparison is a dict of directions containing 2D array boolean of shape (n_cubes, n_cubes)
 
 def find_fill_cubes(cubes):
     # returns indexes to keep
@@ -122,6 +147,8 @@ def find_fill_cubes(cubes):
     return np.any(condition, axis=(1, 2, 3)) == False
 
 def return_shift(D, N, O):
+    # returns shift to be applied to the cube
+    # D is direction N is size of cube O is overlap
     H_shift = (0, N)
     W_shift = (0, N)
     D_shift = (0, N)
@@ -135,13 +162,41 @@ def return_shift(D, N, O):
         H_shift = shift
     elif D == 'down':
         H_shift = opp_shift
-    elif D == 'forwards':
+    elif D == 'front':
         D_shift = shift
-    elif D == 'backwards':
+    elif D == 'back':
         D_shift = opp_shift
     return H_shift, W_shift, D_shift
 
-def compare_cubes(cube_arr, O, one_dir=False):
+def return_cubes_to_compare2D(cubes, view, oppview):
+    # returns cubes to compare HW & HWC
+    # shift is tuple of shifts to be applied to cubes
+    # oppshift is tuple of shifts to be applied to opposite cubes
+    opp_cubes = cubes[:, oppview[0][0]:oppview[0][1], oppview[1][0]:oppview[0][1]]
+    return cubes[:, view[0][0]:view[0][1], view[1][0]:view[0][1]], opp_cubes
+
+def return_cubes_to_compare3D(cubes, view, oppview):
+    # returns cubes to compare HWD
+    # shift is tuple of shifts to be applied to cubes
+    # oppshift is tuple of shifts to be applied to opposite cubes
+    opp_cubes = cubes[:, oppview[0][0]:oppview[0][1], oppview[1][0]:oppview[0][1], oppview[2][0]:oppview[2][1]]
+    return cubes[:, view[0][0]:view[0][1], view[1][0]:view[0][1], view[2][0]:view[2][1]], opp_cubes
+
+def compare(cubes, opp_cubes):
+    # returns (n_cubes)
+    # cubes is array of shape (n_cubes, N-1, N)/C or (n_cubes, N, N-1)/C
+    return np.all(cubes == opp_cubes, axis=0)
+
+def pairwise_compare(cubes, opp_cubes):
+    comp_arr = np.empty((cubes.shape[0], cubes.shape[0]))
+    for i, c in tqdm(enumerate(cubes)):
+        for j, oc in enumerate(opp_cubes):
+            comp_arr[i,j] = np.all(c == oc)
+    return comp_arr
+
+
+
+def compare_cubes_tmp(cube_arr, O, one_dir=False):
     N = cube_arr.shape[-1]
     l = cube_arr.shape[0]
     opp_dict = {'left':'right', 'right':'left', 'up':'down', 'down':'up', 'forwards':'backwards', 'backwards':'forwards'}
