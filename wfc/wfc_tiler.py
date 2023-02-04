@@ -6,7 +6,7 @@ import os
 import wfc.utils_tiler as ut
 
 
-class TileDataset3D:
+class TileDataset:
 
     def __init__(self, form='HWD', bitcube=None, N=None, wrap_pad=True): 
         self.bitcube = bitcube
