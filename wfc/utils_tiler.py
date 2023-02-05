@@ -127,8 +127,10 @@ def compare_cubes(cubes, form, N):
             opp_d = opposite_directions[d]
             view = return_shift(d, N, O)
             opp_view = return_shift(opp_d, N, O)
-            cubes_comp, cubes_comp_opp = return_cubes_to_compare2D(cubes, view, opp_view)
-            comparison[d] = pairwise_compare(cubes_comp, cubes_comp_opp)
+            cubes_comp = cubes[:, view[0][0]:view[0][1], view[1][0]:view[1][1]]
+            cubes_opp = cubes[:, opp_view[0][0]:opp_view[0][1], opp_view[1][0]:opp_view[1][1]]
+            assert cubes_comp.shape == cubes_opp.shape
+            comparison[d] = pairwise_compare(cubes_comp, cubes_opp)
     
     if form == 'HWD':
         directions = ['left', 'right', 'up', 'down', 'front', 'back']
@@ -136,15 +138,12 @@ def compare_cubes(cubes, form, N):
             opp_d = opposite_directions[d]
             view = return_shift(d, N, O)
             opp_view = return_shift(opp_d, N, O)
-            cubes_comp, cubes_comp_opp = return_cubes_to_compare3D(cubes, view, opp_view)
-            comparison[d] = pairwise_compare(cubes_comp, cubes_comp_opp)
+            cubes_comp = cubes[:, view[0][0]:view[0][1], view[1][0]:view[1][1], view[2][0]:view[2][1]]
+            cubes_opp = cubes[:, opp_view[0][0]:opp_view[0][1], opp_view[1][0]:opp_view[1][1], opp_view[2][0]:opp_view[2][1]]
+            assert cubes_comp.shape == cubes_opp.shape
+            comparison[d] = pairwise_compare(cubes_comp, cubes_opp)
 
     return comparison # comparison is a dict of directions containing 2D array boolean of shape (n_cubes, n_cubes)
-
-def find_fill_cubes(cubes):
-    # returns indexes to keep
-    condition = np.isnan(cubes)
-    return np.any(condition, axis=(1, 2, 3)) == False
 
 def return_shift(D, N, O):
     # returns shift to be applied to the cube
@@ -168,72 +167,12 @@ def return_shift(D, N, O):
         D_shift = opp_shift
     return H_shift, W_shift, D_shift
 
-def return_cubes_to_compare2D(cubes, view, oppview):
-    # returns cubes to compare HW & HWC
-    # shift is tuple of shifts to be applied to cubes
-    # oppshift is tuple of shifts to be applied to opposite cubes
-    opp_cubes = cubes[:, oppview[0][0]:oppview[0][1], oppview[1][0]:oppview[0][1]]
-    return cubes[:, view[0][0]:view[0][1], view[1][0]:view[0][1]], opp_cubes
-
-def return_cubes_to_compare3D(cubes, view, oppview):
-    # returns cubes to compare HWD
-    # shift is tuple of shifts to be applied to cubes
-    # oppshift is tuple of shifts to be applied to opposite cubes
-    opp_cubes = cubes[:, oppview[0][0]:oppview[0][1], oppview[1][0]:oppview[0][1], oppview[2][0]:oppview[2][1]]
-    return cubes[:, view[0][0]:view[0][1], view[1][0]:view[0][1], view[2][0]:view[2][1]], opp_cubes
-
-def compare(cubes, opp_cubes):
-    # returns (n_cubes)
-    # cubes is array of shape (n_cubes, N-1, N)/C or (n_cubes, N, N-1)/C
-    return np.all(cubes == opp_cubes, axis=0)
-
 def pairwise_compare(cubes, opp_cubes):
     comp_arr = np.empty((cubes.shape[0], cubes.shape[0]))
     for i, c in tqdm(enumerate(cubes)):
         for j, oc in enumerate(opp_cubes):
-            comp_arr[i,j] = np.all(c == oc)
+            comp_arr[i, j] = np.all(c == oc)
     return comp_arr
-
-
-
-def compare_cubes_tmp(cube_arr, O, one_dir=False):
-    N = cube_arr.shape[-1]
-    l = cube_arr.shape[0]
-    opp_dict = {'left':'right', 'right':'left', 'up':'down', 'down':'up', 'forwards':'backwards', 'backwards':'forwards'}
-    pairwise_master = {'left':np.empty((l, l), dtype='bool'), 'right':np.empty((l, l), dtype='bool'), 
-                        'up':np.empty((l, l), dtype='bool'), 'down':np.empty((l, l), dtype='bool'),
-                        'forwards':np.empty((l, l), dtype='bool'), 'backwards':np.empty((l, l), dtype='bool')}
-    if one_dir:
-        print('only comparing in one dir')
-        opp_dict = {'left':'right'}
-        pairwise_master = {'left':np.empty((l, l), dtype='bool')}
-
-    for D in opp_dict.keys():
-        H_all, W_all, D_all = return_shift(D, N, O)
-        all_cubes_O = cube_arr[:, H_all[0]:H_all[1], W_all[0]:W_all[1], D_all[0]:D_all[1]]
-        H_s, W_s, D_s = return_shift(opp_dict[D], N, O)
-        s_cubes_O = cube_arr[:, H_s[0]:H_s[1], W_s[0]:W_s[1], D_s[0]:D_s[1]]
-        dummy_ind = np.arange(N*O)
-        unravel_tup = (H_all[1] - H_all[0], W_all[1] - W_all[0], D_all[1] - D_all[0])
-        pixH, pixW, pixD = np.unravel_index(dummy_ind, unravel_tup) 
-        unravel_tup = (H_s[1] - H_s[0], W_s[1] - W_s[0], D_s[1] - D_s[0])
-        pixH_s, pixW_s, pixD_s = np.unravel_index(dummy_ind, unravel_tup)
-        num_pix = len(pixH)
-
-        for cube_idx, cube_O in tqdm(enumerate(s_cubes_O)):
-            comp_bool = np.full(l, True)
-            for i in range(num_pix):
-                x = pixH[i]
-                y = pixW[i]
-                z = pixD[i]
-                x_s = pixH_s[i]
-                y_s = pixW_s[i]
-                z_s = pixD_s[i]
-                comp_ind = np.where(np.ma.masked_array(all_cubes_O[:, x, y, z], mask=(comp_bool==False)) \
-                        != cube_O[x_s, y_s, z_s])
-                comp_bool[comp_ind] = False
-            pairwise_master[D][cube_idx] = comp_bool
-    return pairwise_master
 
 def svd(constraints):
     return np.linalg.svd(constraints)

@@ -13,7 +13,7 @@ class WaveSolver:
         self.td = td # containes all information about the tiles, constraints, and form
         self.output_size = output_size # will be of length 2 if format is HW or HWC
         self.n_tiles = len(td)
-        self.mode = 'wrap' # constraints will wrap around output else raise
+        self.mode = 'raise' # constraints will wrap around output else raise
         self.max_contra = 100
 
         # possible directions & form specific attributes
