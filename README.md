@@ -5,7 +5,7 @@
 - WaveSolver, SimulatedAnnealingSolver: Classes for implementing brute force and annealing solver
 
 ## Example Usage:
-`
+```
 from wfc.wfc_tiler import TileDataset
 from wfc.wfc_solver import WaveSolver, SimulatedAnnealingSolver 
 import matplotlib.pyplot as plt
@@ -15,7 +15,7 @@ wavyHW = WaveSolver(td_HW, form='HW', output_size=(50, 50), wrap_pad=True) # ini
 out_HW = wavyHW.solve() # solve
 plt.imshow(out_HW) # plot
 plt.savefig('HW_test.png') # save
-`
+```
 ## Requirements
 python >= 3.9
 numpy >= 1.21
